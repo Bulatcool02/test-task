@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Все как в предложенном вами варианте
+ * Для удобства в одном сервисе у меня будет вся логика работы с отправкой и прослушиванием сообщений из шины событий
  */
 @Service
 public class MessagingServiceImpl implements MessagingService, MessageListener<UserConfirm>{
@@ -56,7 +56,7 @@ public class MessagingServiceImpl implements MessagingService, MessageListener<U
         }
 
         responseMessage.setMessageId(messageId);
-        //рандомно генерим ответ на запрос по регистрации
+        //рандомно генерим статус подтверждения запроса
         if (new Random().nextBoolean()){
             responseMessage.setMessageStatus("OK");
         } else {
@@ -69,23 +69,32 @@ public class MessagingServiceImpl implements MessagingService, MessageListener<U
     public <R, A> Message<ResponseMessage> doRequest(Message<User> request) throws TimeoutException {
         final UUID messageId = send(request);
         Message<ResponseMessage> response =  receive(messageId);
+        //если запрос успешно прошел юзер добавляется в список ожидающих ответа
         if (response.getPayload().getMessageStatus().equals("OK")){
             usersWaitConfirm.add(request.getPayload());
         }
         return response;
     }
 
+    /**
+     * Перехватчик ответов
+     * @param incomingMessage - сообщение с ответом на запрос по регистрации
+     */
     @Override
     public void handleMessage(Message<UserConfirm> incomingMessage) {
         User deleteThisUser = null;
+        //пробегаемся по списку юзеров ожидающих ответа и сравниваем id из ответа с id юзера в списке
         for (User user:usersWaitConfirm){
             if (user.getId().equals(incomingMessage.getPayload().getUserId())){
                 UserEntity userEntity = this.userRepository.findByEmail(user.getEmail());
                 if (userEntity == null){
                     throw new MasterException(ErrorCode.USER_NOT_FOUND);
                 }
+                //готовимся удалить юзера из списка ожидающих ответа, т.к. ответ по данному юзеру уже получили
                 deleteThisUser = user;
                 String content;
+                //Если получили добро на регистрацию - меняем статус у юзера в БД на ACTIVE и отправляем GOOD EMAIL
+                // иначе - ставим статус INACTIVE и отправляем BAD EMAIL
                 if (incomingMessage.getPayload().getConfirmStatus().equals("OK")){
                     content = "good mail";
                     userEntity.setStatus(UserStatus.ACTIVE);

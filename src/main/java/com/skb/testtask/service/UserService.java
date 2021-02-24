@@ -100,6 +100,9 @@ public class UserService {
         }
     }
 
+    /**
+     * Метод отправки юзеров повторно
+     */
     @Scheduled(cron = "0 * * * * *")
     public void sendUserToQueueOnSchedule(){
         LOGGER.info("schedule job started");
@@ -109,7 +112,12 @@ public class UserService {
         }
     }
 
-    public UserEntity getUser(Long id){
-        return userRepository.findById(id).get();
+    /**
+     * Метод для тестирования функционала
+     * @param id - идентификатор юзера
+     * @return - юзер
+     */
+    public User getUser(Long id){
+        return modelMapper.map(userRepository.findById(id).get(), User.class);
     }
 }

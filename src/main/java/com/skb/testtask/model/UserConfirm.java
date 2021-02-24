@@ -7,6 +7,9 @@ import lombok.NoArgsConstructor;
 
 import java.util.UUID;
 
+/**
+ * Дто которое ожидается получить в ответе на запрос по регистрации юзера
+ */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor

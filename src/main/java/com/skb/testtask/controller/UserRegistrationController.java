@@ -38,7 +38,7 @@ public class UserRegistrationController {
     }
 
     @GetMapping("/user")
-    public UserEntity getById(@RequestParam(name = "id") Long id){
+    public User getById(@RequestParam(name = "id") Long id){
         return userService.getUser(id);
     }
 }
