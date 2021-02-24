@@ -79,9 +79,4 @@ class UserServiceTest {
         userService.sendUserToQueue(user);
         Mockito.verify(messagingService, Mockito.times(1)).doRequest(any(Message.class));
     }
-    @Test
-    void sendEmail() throws TimeoutException {
-        userService.sendEmail("TEST", "TEST");
-        Mockito.verify(sendEmailImpl, Mockito.times(1)).sendMail("TEST@MAIL.RU", "TEST", "TEST");
-    }
 }

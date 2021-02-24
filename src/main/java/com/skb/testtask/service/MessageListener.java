@@ -1,8 +1,7 @@
 package com.skb.testtask.service;
 
-
 import org.springframework.messaging.Message;
 
-public interface MessageListener<T> {
-    void handleMessage(Message<T> incomingMessage);
+public interface MessageListener<UserConfirm> {
+    void handleMessage(Message<com.skb.testtask.model.UserConfirm> incomingMessage);
 }

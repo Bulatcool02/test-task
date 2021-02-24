@@ -2,6 +2,7 @@ package com.skb.testtask.service;
 
 import com.skb.testtask.model.ResponseMessage;
 import com.skb.testtask.model.User;
+import com.skb.testtask.model.UserConfirm;
 import com.skb.testtask.model.UserStatus;
 import com.skb.testtask.model.entity.UserEntity;
 import com.skb.testtask.repository.UserRepository;
@@ -12,9 +13,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -28,14 +33,18 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder encoder;
     private final MessagingServiceImpl messagingService;
-    private final SendEmailImpl sendEmailImpl;
     private final ModelMapper modelMapper;
 
-    public UserService(UserRepository userRepository, PasswordEncoder encoder, MessagingServiceImpl messagingService, SendEmailImpl sendEmailImpl, ModelMapper modelMapper) {
+    private final List<User> usersErrorOnQueue = new ArrayList<>();
+
+
+    public UserService(UserRepository userRepository,
+                       PasswordEncoder encoder,
+                       MessagingServiceImpl messagingService,
+                       ModelMapper modelMapper) {
         this.userRepository = userRepository;
         this.encoder = encoder;
         this.messagingService = messagingService;
-        this.sendEmailImpl = sendEmailImpl;
         this.modelMapper = modelMapper;
     }
 
@@ -65,11 +74,13 @@ public class UserService {
             userEntity.setStatus(UserStatus.WAIT);
         }
         UserEntity userEntityReturn = userRepository.save(userEntity);
+        User savedUser = modelMapper.map(userEntityReturn, User.class);
         // отправка в шину
-        sendUserToQueue(user);
+        sendUserToQueue(savedUser);
         // не знаю как везде делается, но я предпочитаю не возвращать пароли на запросы по REST (мало ли)
         userEntityReturn.setPassword("*");
-        return modelMapper.map(userEntityReturn, User.class);
+
+        return savedUser;
     }
 
     /**
@@ -81,38 +92,24 @@ public class UserService {
         Message<ResponseMessage> responseMessage;
         try{
             responseMessage = messagingService.doRequest(message);
+            if (responseMessage.getPayload().getMessageStatus().equals("FAIL")){
+                usersErrorOnQueue.add(user);
+            }
         } catch (TimeoutException e){
             throw new MasterException(ErrorCode.QUEUE_EXCEPTION);
         }
-        // после того как дождались ответа чекаем,что нам отправить на почту юзеру - письмо с подтверждением/отказом на регистрацию
-        if (responseMessage != null){
-            UserEntity userEntity = this.userRepository.findByEmail(user.getEmail());
-            if (userEntity == null){
-                throw new MasterException(ErrorCode.USER_NOT_FOUND);
-            }
-            ResponseMessage response = responseMessage.getPayload();
-            String content;
-            // в зависимости от ответа меняем статус для юзера на соответсвующий и рассылаем письма с необходиммым контентом
-            if (response.getMessageStatus().equals("OK")){
-                userEntity.setStatus(UserStatus.ACTIVE);
-                userRepository.save(userEntity);
-                content = "Good email";
-                LOGGER.info("Message was send with status OK");
-            } else {
-                userEntity.setStatus(UserStatus.INACTIVE);
-                userRepository.save(userEntity);
-                content = "Bad email";
-                LOGGER.info("Message was send with status FAIL");
-            }
-            sendEmail(user.getEmail(), content);
+    }
+
+    @Scheduled(cron = "0 * * * * *")
+    public void sendUserToQueueOnSchedule(){
+        LOGGER.info("schedule job started");
+        for (User user:usersErrorOnQueue){
+            sendUserToQueue(user);
+            usersErrorOnQueue.remove(user);
         }
     }
 
-    public void sendEmail(String email, String text) {
-        try{
-            sendEmailImpl.sendMail("TEST@MAIL.RU", email, text);
-        } catch (TimeoutException e){
-            throw new MasterException(ErrorCode.EMAIL_EXCEPTION);
-        }
+    public UserEntity getUser(Long id){
+        return userRepository.findById(id).get();
     }
 }
